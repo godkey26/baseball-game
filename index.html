@@ -800,32 +800,22 @@ function renderField() {
         }
 
         // 이미지 저장 기능
-        function saveAsImage() {
-            const captureArea = document.getElementById('captureArea');
-            const originalBg = captureArea.style.backgroundColor;
-            const originalPadding = captureArea.style.padding;
-            
-            // 캡처 시 배경색을 흰색으로 임시 변경
-            captureArea.style.backgroundColor = 'white';
-            captureArea.style.padding = '10px';
-
-            html2canvas(captureArea, {
-                allowTaint: true,
-                useCORS: true,
-                scale: 2 
-            }).then(function(canvas) {
-                // 배경색과 패딩을 원래대로 되돌림
-                captureArea.style.backgroundColor = originalBg;
-                captureArea.style.padding = originalPadding;
-                
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png');
-                link.download = `나의_KBO_드림팀_${new Date().toLocaleDateString()}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            });
-        }
+function saveAsImage() {
+    const captureArea = document.getElementById('captureArea');
+    
+    html2canvas(captureArea, {
+        allowTaint: true,
+        useCORS: true,
+        scale: 4 // 해상도를 높여 이미지 깨짐 현상 개선
+    }).then(function(canvas) {
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = `나의_KBO_드림팀_${new Date().toLocaleDateString()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+}
         
         // 드래그앤드롭 함수
         function dragStart(e, index) {
@@ -871,4 +861,5 @@ function renderField() {
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
+
 </html>
