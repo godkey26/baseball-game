@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>나의 KBO 드림팀 만들기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .drag-over { background-color: rgba(59, 130, 246, 0.2) !important; }
+        .stadium-bg {
+            background-image: url('baseballpng.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        
+        /* 1. KBO 10개 구단... 줄바꿈 */
+        @media (max-width: 639px) {
+            .line-break-on-mobile {
+                display: block; /* 줄바꿈 */
+            }
+        }
+        
+        .player-card {
+            width: 80px;
+            height: 112px;
+        }
+
+        /* 3. 필드 카드 겹침 현상 해결 */
+        @media (max-width: 639px) {
+            .player-card {
+                width: 60px;
+                height: 87px;
+            }
+        }
+
+        @media (min-width: 640px) {
+            .player-card {
+                width: 96px;
+                height: 128px;
+            }
+        }
+    
+        
+        /* 모바일에서 구단별 현황 2x5 그리드 */
+        @media (max-width: 639px) {
+            .team-status-grid {
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                gap: 8px;
+            }
+        }
+        
+        /* 라인업 스크롤바 숨기기 (선택 사항) */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+
+            /* 기존 터치 드래그 CSS 삭제하고 아래로 교체 */
+        .lineup-selected {
+            opacity: 0.6;
+            transform: scale(0.95);
+            border: 2px solid #fbbf24 !important;
+        }
+
+        .lineup-selected::after {
+            content: '선택됨';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fbbf24;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        .change-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #3b82f6;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+        }
+
+        .change-btn:hover {
+            background: #2563eb;
+            transform: translate(-50%, -50%) scale(1.05);
+        }
+
+        /* 모바일에서만 선택 방식 사용 */
+        @media (max-width: 639px) {
+            .lineup-player {
+                cursor: pointer !important;
+            }
+        }
+
+        @media (min-width: 640px) {
+            .lineup-player {
+                cursor: move !important;
+            }
+        }
+
+        /* PC 버전 (640px 이상) */
+        @media (min-width: 640px) {
+            #teamStatus {
+                display: flex;
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 16px; /* PC 환경에서 박스 간격 넓히기 */
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-green-900 via-blue-900 to-purple-900">
+    
+    <header class="bg-black/80 backdrop-blur-md shadow-2xl border-b border-white/20">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                    <h1 class="text-xl sm:text-3xl font-bold text-white tracking-tight truncate">
+                        나의 KBO 드림팀 만들기
+                    </h1>
+                    <p class="text-gray-300 text-xs sm:text-base mt-1 font-medium truncate">
+                        KBO 10개 구단에서 <span class="line-break-on-mobile">한 명씩 선택하여 최강의 팀을 구성하세요</span>
+                    </p>
+                </div>
+                
+                <div class="flex items-center space-x-3 flex-shrink-0">
+                    <div class="bg-white/10 backdrop-blur px-3 py-2 rounded-xl border border-white/20">
+                        <div class="text-center">
+                            <div id="selectedCount" class="text-lg font-bold text-yellow-400">0/10</div>
+                            <div class="text-xs text-gray-300">선수</div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        
+        <div class="bg-gradient-to-r from-blue-900/30 to-purple-900/30 backdrop-blur rounded-xl p-3 mb-4 border border-blue-500/30">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <span class="text-blue-400">ℹ️</span>
+                    <span class="text-blue-300 font-semibold text-sm">규칙</span>
+                </div>
+                <button onclick="showRulesModal()" class="text-blue-400 hover:text-blue-300 text-xs">
+                    자세히
+                </button>
+            </div>
+            <div class="mt-2 text-xs text-blue-200 space-y-1">
+                <div>• 타자 9명 + 선발투수 1명 = 총 10명 구성</div>
+                <div>• 국내 선수로만 구성</div>
+                <div>• 각 구단에서 한 명씩만 선택 가능</div>
+                <div>• 드래그로 타순 변경 (투수 제외)</div>
+            </div>
+        </div>
+       
+        <div class="bg-white/5 backdrop-blur-lg rounded-xl p-3 mb-6 border border-white/20">
+            <h3 class="text-md font-bold text-white mb-2 flex items-center justify-center sm:justify-start space-x-2">
+                <span>📊</span>
+                <span>구단별 사용 현황</span>
+            </h3>
+            <div id="teamStatus" class="flex justify-center flex-wrap team-status-grid">
+                </div>
+        </div>
+        
+        <div id="captureArea">
+            <div class="mb-6 sm:mb-8">
+                <div class="backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-8 border border-white/20 shadow-2xl">
+
+                    <div class="relative w-full max-w-4xl mx-auto">
+                        <div class="relative w-full h-96 sm:h-[700px] rounded-xl stadium-bg stadium-container">
+                            <div id="fieldPositions" class="relative w-full h-full">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white/10 backdrop-blur-lg rounded-xl p-4 sm:p-6 border border-white/20 shadow-xl mb-6">
+                <h3 class="text-md font-bold text-white mb-4 flex items-center justify-center sm:justify-start space-x-2">
+                    <span>⚾</span>
+                    <span>라인업 구성</span>
+                </h3>
+                <div id="lineup" class="flex items-center justify-start sm:justify-center space-x-2 sm:space-x-3 overflow-x-auto pb-2 no-scrollbar">
+                </div>
+
+                <div class="text-center mt-4 text-xs sm:text-sm text-gray-300">
+                    💡 타순은 필드 선택 순으로 배정되며,  <span class="line-break-on-mobile"></span>타자 카드를 드래그하여 타순을 변경할 수 있습니다
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-6">
+            <button onclick="resetTeam()" class="w-full sm:w-auto bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-semibold transition-all flex items-center justify-center space-x-2 shadow-lg">
+                <span>🔄</span>
+                <span>다시 구성하기</span>
+            </button>
+            
+            <button onclick="saveAsImage()" id="saveBtn" class="w-full sm:w-auto bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-semibold transition-all flex items-center justify-center space-x-2 shadow-lg">
+                <span>📷</span>
+                <span>이미지로 저장하기</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="playerSelectionModal" class="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white/10 backdrop-blur-xl rounded-2xl p-6 max-w-2xl w-full border border-white/20">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="modalTitle" class="text-xl font-bold text-white">선수 선택</h3>
+                <button onclick="closePlayerModal()" class="w-8 h-8 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors flex items-center justify-center">
+                    ×
+                </button>
+            </div>
+
+            <div class="text-center text-sm text-gray-300 mb-4">
+                사용 가능한 모든 선수가 표시됩니다 (지명타자는 모든 타자 선택 가능)
+            </div>
+
+            <div id="playerList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[70vh] overflow-y-auto">
+                </div>
+        </div>
+    </div>
+
+    <div id="rulesModal" class="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white/10 backdrop-blur-xl rounded-2xl p-6 sm:p-8 max-w-lg w-full border border-white/20">
+            <div class="text-center">
+                <h3 class="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">📋 드림팀 구성 규칙</h3>
+                
+                <div class="space-y-3 sm:space-y-4 text-left">
+                    <div class="bg-blue-500/20 rounded-lg p-3 sm:p-4 border border-blue-500/30">
+                        <h4 class="font-bold text-blue-300 mb-2">1️⃣ 선수 구성</h4>
+                        <p class="text-white/90 text-sm">
+                            타자 9명 + 선발투수 1명으로<br/>
+                            총 10명의 선수를 구성합니다.<br/>
+                            <span class="text-blue-300 font-semibold">
+                                (국내 선수만 포함)
+                            </span>
+                        </p>
+                    </div>
+                    
+                    <div class="bg-red-500/20 rounded-lg p-3 sm:p-4 border border-red-500/30">
+                        <h4 class="font-bold text-red-300 mb-2">2️⃣ 팀 제한</h4>
+                        <p class="text-white/90 text-sm">
+                            KBO 10개 구단에서 한 명씩만<br/>
+                            데려올 수 있습니다.<br/>
+                            <span class="text-red-300 font-semibold">
+                                (한 팀에서 두 명 이상 선택 불가)
+                            </span>
+                        </p>
+                    </div>
+                    
+                    <div class="bg-green-500/20 rounded-lg p-3 sm:p-4 border border-green-500/30">
+                        <h4 class="font-bold text-green-300 mb-2">3️⃣ 타순 변경</h4>
+                        <p class="text-white/90 text-sm">
+                            타자 카드를 드래그하여<br/>
+                            자유롭게 타순을 변경할 수 있습니다.<br/>
+                            <span class="text-green-300 font-semibold">
+                                (선발투수는 고정)
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                
+                <button onclick="closeRulesModal()" class="mt-4 sm:mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold transition-all w-full sm:w-auto">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-black/60 backdrop-blur border-t border-white/20 py-6 sm:py-8 mt-12 sm:mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 text-center">
+            <div class="text-gray-400 text-sm leading-relaxed">
+                <p class="mb-2">본 서비스는 비영리 목적으로 제작된 팬페이지입니다.</p>
+                <p>선수 사진, 팀 로고, 기록에 대한 모든 저작권은 <span class="font-semibold text-white">KBO 및 각 구단</span>에 귀속됩니다.</p>
+            </div>
+            
+            <div class="mt-4 sm:mt-6 pt-4 border-t border-gray-700">
+                <div class="flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-8 text-sm text-gray-500">
+                    <div class="flex items-center space-x-2">
+                        <span>⚾</span>
+                        <span>2024 KBO 시즌</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span>🏆</span>
+                        <span>드림팀 만들기</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span>📱</span>
+                        <span>모바일 지원</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script>
+
+            const positions = {
+                'LF': { name: '좌익수', x: '25%', y: '25%', mobileX: '15%', mobileY: '25%' },
+                'CF': { name: '중견수', x: '50%', y: '15%', mobileX: '50%', mobileY: '10%' },
+                'RF': { name: '우익수', x: '75%', y: '25%', mobileX: '85%', mobileY: '25%' },
+                'SS': { name: '유격수', x: '38%', y: '45%', mobileX: '38%', mobileY: '37%' },
+                '2B': { name: '2루수', x: '62%', y: '45%', mobileX: '62%', mobileY: '37%' },
+                '3B': { name: '3루수', x: '31%', y: '69%', mobileX: '15%', mobileY: '60%' },
+                '1B': { name: '1루수', x: '69%', y: '69%', mobileX: '85%', mobileY: '60%' },
+                'C': { name: '포수', x: '50%', y: '85%', mobileX: '50%', mobileY: '89%' },
+                'DH': { name: '지명타자', x: '85%', y: '85%', mobileX: '80%', mobileY: '89%' },
+                'P': { name: '선발투수', x: '50%', y: '60%', mobileX: '50%', mobileY: '63%' }
+            };
+
+            const teams = {
+                'KIA': { name: 'KIA 타이거즈', color: '#EA0029', subColor: '#000000', logo: '🐅' },
+                'SSG': { name: 'SSG 랜더스', color: '#CE0E2D', subColor: '#1C1C1C', logo: '🦅' },
+                'LG': { name: 'LG 트윈스', color: '#C30452', subColor: '#FFFFFF', logo: '👯' },
+                '두산': { name: '두산 베어스', color: '#131230', subColor: '#FF6B35', logo: '🐻' },
+                'NC': { name: 'NC 다이노스', color: '#315288', subColor: '#C4A484', logo: '🦖' },
+                'KT': { name: 'KT 위즈', color: '#000000', subColor: '#ED1C24', logo: '🧙‍♂️' },
+                '한화': { name: '한화 이글스', color: '#FF6600', subColor: '#000000', logo: '🦅' },
+                '롯데': { name: '롯데 자이언츠', color: '#041E42', subColor: '#C4122F', logo: '🧌' },
+                '삼성': { name: '삼성 라이온즈', color: '#074CA1', subColor: '#FFFFFF', logo: '🦁' },
+                '키움': { name: '키움 히어로즈', color: '#820024', subColor: '#570018', logo: '🦸‍♂️' }
+            };
+
+            // 타자 데이터
+            const players = {
+                'LG': [
+                    { id: 'lg_1', name: '문보경', position: '3B', image: '👤', stats: '타율 .292' },
+                    { id: 'lg_2', name: '박동원', position: 'C', image: '👤', stats: '타율 .259' },
+                    { id: 'lg_3', name: '박해민', position: 'CF', image: '👤', stats: '타율 .278' },
+                    { id: 'lg_4', name: '김현수', position: 'LF', image: '👤', stats: '타율 .298' },
+                    { id: 'lg_5', name: '구본혁', position: 'SS', image: '👤', stats: '타율 .277' },
+                    { id: 'lg_6', name: '신민재', position: '2B', image: '👤', stats: '타율 .310' },
+                    { id: 'lg_7', name: '오지환', position: 'SS', image: '👤', stats: '타율 .239' },
+                    { id: 'lg_8', name: '문성주', position: 'RF', image: '👤', stats: '타율 .300' }
+                ],
+                '한화': [
+                    { id: 'hanwha_1', name: '최재훈', position: 'C', image: '👤', stats: '타율 .280' },
+                    { id: 'hanwha_2', name: '노시환', position: '3B', image: '👤', stats: '타율 .233' },
+                    { id: 'hanwha_3', name: '문현빈', position: 'LF', image: '👤', stats: '타율 .322' },
+                    { id: 'hanwha_4', name: '이진영', position: 'RF', image: '👤', stats: '타율 .275' },
+                    { id: 'hanwha_5', name: '채은성', position: '1B', image: '👤', stats: '타율 .297' },
+                    { id: 'hanwha_6', name: '하주석', position: 'SS', image: '👤', stats: '타율 .283' },
+                    { id: 'hanwha_7', name: '심우준', position: 'SS', image: '👤', stats: '타율 .212' },
+                    { id: 'hanwha_8', name: '김태연', position: '1B', image: '👤', stats: '타율 .262' }
+                ],
+                '롯데': [
+                    { id: 'lotte_1', name: '유강남', position: 'C', image: '👤', stats: '타율 .285' },
+                    { id: 'lotte_2', name: '고승민', position: '2B', image: '👤', stats: '타율 .279' },
+                    { id: 'lotte_3', name: '윤동희', position: 'RF', image: '👤', stats: '타율 .278' },
+                    { id: 'lotte_4', name: '전준우', position: 'DH', image: '👤', stats: '타율 .288' },
+                    { id: 'lotte_5', name: '한태양', position: '2B', image: '👤', stats: '타율 .275' },
+                    { id: 'lotte_6', name: '장두성', position: 'CF', image: '👤', stats: '타율 .276' },
+                    { id: 'lotte_7', name: '전민재', position: 'SS', image: '👤', stats: '타율 .291' },
+                    { id: 'lotte_8', name: '황성빈', position: 'CF', image: '👤', stats: '타율 .267' },
+                    { id: 'lotte_9', name: '손호영', position: '3B', image: '👤', stats: '타율 .254' }
+                ],
+                'SSG': [
+                    { id: 'ssg_1', name: '박성한', position: 'SS', image: '👤', stats: '타율 .259' },
+                    { id: 'ssg_2', name: '한유섬', position: 'RF', image: '👤', stats: '타율 .282' },
+                    { id: 'ssg_3', name: '최지훈', position: 'CF', image: '👤', stats: '타율 .269' },
+                    { id: 'ssg_4', name: '정준재', position: '2B', image: '👤', stats: '타율 .237' },
+                    { id: 'ssg_5', name: '조형우', position: 'C', image: '👤', stats: '타율 .248' },
+                    { id: 'ssg_6', name: '최정', position: 'DH', image: '👤', stats: '타율 .226' },
+                    { id: 'ssg_7', name: '고명준', position: '1B', image: '👤', stats: '타율 .271' },
+                    { id: 'ssg_8', name: '오태곤', position: 'LF', image: '👤', stats: '타율 .203' },
+                    { id: 'ssg_9', name: '안상현', position: '3B', image: '👤', stats: '타율 .261' }
+                ],
+                'KT': [
+                    { id: 'kt_1', name: '안현민', position: 'RF', image: '👤', stats: '타율 .344' },
+                    { id: 'kt_2', name: '장성우', position: 'C', image: '👤', stats: '타율 .248' },
+                    { id: 'kt_3', name: '허경민', position: '3B', image: '👤', stats: '타율 .279' },
+                    { id: 'kt_4', name: '강백호', position: 'DH', image: '👤', stats: '타율 .263' },
+                    { id: 'kt_5', name: '김상수', position: '2B', image: '👤', stats: '타율 .253' },
+                    { id: 'kt_6', name: '오윤석', position: '2B', image: '👤', stats: '타율 .256' },
+                    { id: 'kt_7', name: '권동진', position: 'SS', image: '👤', stats: '타율 .231' },
+                    { id: 'kt_8', name: '황재균', position: '1B', image: '👤', stats: '타율 .269' },
+                    { id: 'kt_9', name: '문상철', position: '1B', image: '👤', stats: '타율 .208' }
+                ],
+                '삼성': [
+                    { id: 'samsung_1', name: '김성윤', position: 'CF', image: '👤', stats: '타율 .331' },
+                    { id: 'samsung_2', name: '구자욱', position: 'LF', image: '👤', stats: '타율 .315' },
+                    { id: 'samsung_3', name: '이재현', position: 'SS', image: '👤', stats: '타율 .225' },
+                    { id: 'samsung_4', name: '강민호', position: 'C', image: '👤', stats: '타율 .271' },
+                    { id: 'samsung_5', name: '김영웅', position: '3B', image: '👤', stats: '타율 .256' },
+                    { id: 'samsung_6', name: '류지혁', position: '2B', image: '👤', stats: '타율 .287' },
+                    { id: 'samsung_7', name: '양도근', position: '2B', image: '👤', stats: '타율 .268' },
+                    { id: 'samsung_8', name: '박병호', position: 'DH', image: '👤', stats: '타율 .202' },
+                    { id: 'samsung_9', name: '김지찬', position: 'CF', image: '👤', stats: '타율 .268' }
+                ],
+                'KIA': [
+                    { id: 'kia_1', name: '최형우', position: 'DH', image: '👤', stats: '타율 .313' },
+                    { id: 'kia_2', name: '박찬호', position: 'SS', image: '👤', stats: '타율 .278' },
+                    { id: 'kia_3', name: '김태군', position: 'C', image: '👤', stats: '타율 .275' },
+                    { id: 'kia_4', name: '김호령', position: 'CF', image: '👤', stats: '타율 .266' },
+                    { id: 'kia_5', name: '나성범', position: 'RF', image: '👤', stats: '타율 .278' },
+                    { id: 'kia_6', name: '김선빈', position: '2B', image: '👤', stats: '타율 .306' },
+                    { id: 'kia_7', name: '한준수', position: 'C', image: '👤', stats: '타율 .246' },
+                    { id: 'kia_8', name: '오선우', position: '1B', image: '👤', stats: '타율 .281' }
+                ],
+                '두산': [
+                    { id: 'doosan_1', name: '양의지', position: 'C', image: '👤', stats: '타율 .336' },
+                    { id: 'doosan_2', name: '정수빈', position: 'CF', image: '👤', stats: '타율 .273' },
+                    { id: 'doosan_3', name: '오명진', position: '2B', image: '👤', stats: '타율 .277' },
+                    { id: 'doosan_4', name: '강승호', position: '3B', image: '👤', stats: '타율 .231' },
+                    { id: 'doosan_5', name: '김재환', position: 'DH', image: '👤', stats: '타율 .239' },
+                    { id: 'doosan_6', name: '이유찬', position: 'SS', image: '👤', stats: '타율 .257' },
+                    { id: 'doosan_7', name: '양석환', position: '1B', image: '👤', stats: '타율 .242' },
+                    { id: 'doosan_8', name: '김인태', position: 'LF', image: '👤', stats: '타율 .235' },
+                    { id: 'doosan_9', name: '임종성', position: '3B', image: '👤', stats: '타율 .277' },
+                    { id: 'doosan_10', name: '안재석', position: 'DH', image: '👤', stats: '타율 .414' },
+                    { id: 'doosan_11', name: '박준순', position: '3B', image: '👤', stats: '타율 .300' },
+                    { id: 'doosan_12', name: '박계범', position: '2B', image: '👤', stats: '타율 .250' }
+                ],
+                'NC': [
+                    { id: 'nc_1', name: '김주원', position: 'SS', image: '👤', stats: '타율 .299' },
+                    { id: 'nc_2', name: '박민우', position: '2B', image: '👤', stats: '타율 .301' },
+                    { id: 'nc_3', name: '김형준', position: 'C', image: '👤', stats: '타율 .234' },
+                    { id: 'nc_4', name: '권희동', position: 'LF', image: '👤', stats: '타율 .235' },
+                    { id: 'nc_5', name: '최정원', position: 'CF', image: '👤', stats: '타율 .283' },
+                    { id: 'nc_6', name: '김휘집', position: '3B', image: '👤', stats: '타율 .228' },
+                    { id: 'nc_7', name: '박건우', position: 'RF', image: '👤', stats: '타율 .282' },
+                    { id: 'nc_8', name: '손아섭', position: 'RF', image: '👤', stats: '타율 .300' },
+                    { id: 'nc_9', name: '김한별', position: '3B', image: '👤', stats: '타율 .316' }
+                ],
+                '키움': [
+                    { id: 'kiwoom_1', name: '송성문', position: '3B', image: '👤', stats: '타율 .309' },
+                    { id: 'kiwoom_2', name: '이주형', position: 'CF', image: '👤', stats: '타율 .247' },
+                    { id: 'kiwoom_3', name: '임지열', position: 'LF', image: '👤', stats: '타율 .247' },
+                    { id: 'kiwoom_4', name: '최주환', position: '1B', image: '👤', stats: '타율 .272' },
+                    { id: 'kiwoom_5', name: '박주홍', position: 'RF', image: '👤', stats: '타율 .231' },
+                    { id: 'kiwoom_6', name: '김건희', position: 'C', image: '👤', stats: '타율 .245' },
+                    { id: 'kiwoom_7', name: '오선진', position: 'SS', image: '👤', stats: '타율 .215' },
+                    { id: 'kiwoom_8', name: '전태현', position: '2B', image: '👤', stats: '타율 .236' }
+                ]
+            };
+
+            // 투수 데이터
+            const pitchers = {
+                'LG': [
+                    { id: 'lg_p1', name: '임찬규', position: 'P', image: '👤', stats: 'ERA 2.90' },
+                    { id: 'lg_p2', name: '손주영', position: 'P', image: '👤', stats: 'ERA 3.80' }
+                ],
+                '한화': [
+                    { id: 'hanwha_p1', name: '문동주', position: 'P', image: '👤', stats: 'ERA 3.54' },
+                    { id: 'hanwha_p2', name: '류현진', position: 'P', image: '👤', stats: 'ERA 3.92' }
+                ],
+                '롯데': [
+                    { id: 'lotte_p1', name: '나균안', position: 'P', image: '👤', stats: 'ERA 4.61' },
+                    { id: 'lotte_p2', name: '박세웅', position: 'P', image: '👤', stats: 'ERA 5.56' }
+                ],
+                'SSG': [
+                    { id: 'ssg_p1', name: '오원석', position: 'P', image: '👤', stats: 'ERA 3.61' },
+                    { id: 'ssg_p2', name: '김광현', position: 'P', image: '👤', stats: 'ERA 4.79' }
+                ],
+                'KT': [
+                    { id: 'kt_p1', name: '고영표', position: 'P', image: '👤', stats: 'ERA 3.54' },
+                    { id: 'kt_p2', name: '소형준', position: 'P', image: '👤', stats: 'ERA 3.80' }
+                ],
+                '삼성': [
+                    { id: 'samsung_p1', name: '원태인', position: 'P', image: '👤', stats: 'ERA 3.52' },
+                    { id: 'samsung_p2', name: '최원태', position: 'P', image: '👤', stats: 'ERA 4.76' },
+                    { id: 'samsung_p3', name: '이승현', position: 'P', image: '👤', stats: 'ERA 4.85' }
+                ],
+                'KIA': [
+                    { id: 'kia_p1', name: '양현종', position: 'P', image: '👤', stats: 'ERA 5.27' },
+                    { id: 'kia_p2', name: '김도현', position: 'P', image: '👤', stats: 'ERA 5.61' }
+                ],
+                '두산': [
+                    { id: 'doosan_p1', name: '최승용', position: 'P', image: '👤', stats: 'ERA 4.30' }
+                ],
+                'NC': [
+                    { id: 'nc_p1', name: '신민혁', position: 'P', image: '👤', stats: 'ERA 5.77' }
+                ],
+                '키움': [
+                    { id: 'kiwoom_p1', name: '하영민', position: 'P', image: '👤', stats: 'ERA 5.41' },
+                    { id: 'kiwoom_p2', name: '김윤하', position: 'P', image: '👤', stats: 'ERA 7.77' }
+                ]
+            };
+
+            // 상태 변수
+            let selectedPlayers = {};
+            let usedTeams = new Set();
+            let lineup = Array(10).fill(null);
+            let currentPosition = null;
+
+            // PC 드래그앤드롭 상태 변수
+            let draggedIndex = null;
+
+            // 모바일 선택 방식 상태 변수
+            let selectedLineupIndex = null;
+
+            // 모바일 체크 함수
+            function isMobile() {
+                return window.innerWidth <= 639;
+            }
+
+            // 초기화
+            function init() {
+                renderTeamStatus();
+                renderField();
+                renderLineup();
+                updateSelectedCount();
+            }
+
+            // 팀 상태 렌더링
+            function renderTeamStatus() {
+                const container = document.getElementById('teamStatus');
+                container.innerHTML = '';
+                
+                Object.entries(teams).forEach(([teamKey, teamInfo]) => {
+                    const isUsed = usedTeams.has(teamKey);
+                    const div = document.createElement('div');
+                    div.className = `p-1 sm:p-2 rounded-lg border transition-all text-center ${
+                        isUsed ? 'bg-red-500/20 border-red-500 text-red-300' : 'bg-green-500/20 border-green-500 text-green-300'
+                    }`;
+                    div.style.minWidth = '60px';
+                    div.innerHTML = `
+                        <div class="text-sm sm:text-lg">${teamInfo.logo}</div>
+                        <div class="text-xs font-bold">${teamKey}</div>
+                        <div class="text-xs mt-1">${isUsed ? '사용' : '가능'}</div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            // 야구장 렌더링
+            function renderField() {
+                const container = document.getElementById('fieldPositions');
+                container.innerHTML = '';
+
+                const mobile = isMobile();
+
+                Object.entries(positions).forEach(([pos, info]) => {
+                    const player = selectedPlayers[pos];
+                    const teamInfo = player ? teams[player.team] : null;
+
+                    const div = document.createElement('div');
+                    div.id = `pos-${pos}`;
+                    div.className = 'absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20';
+
+                    // 모바일/PC에 따라 다른 위치 적용
+                    div.style.left = mobile ? info.mobileX : info.x;
+                    div.style.top = mobile ? info.mobileY : info.y;
+
+                    div.onclick = () => openPlayerSelection(pos);
+
+                    if (player) {
+                        div.innerHTML = `
+                            <div class="group relative">
+                                <div class="player-card rounded-lg border-2 shadow-2xl transform hover:scale-110 transition-all duration-300 hover:rotate-2"
+                                    style="background: linear-gradient(135deg, ${teamInfo.color}, ${teamInfo.subColor}dd); border-color: ${teamInfo.color}; box-shadow: 0 8px 25px ${teamInfo.color}60;">
+                                    <div class="p-2 text-center h-full flex flex-col justify-between">
+                                        <div class="text-2xl sm:text-3xl">${player.image}</div>
+                                        <div>
+                                            <div class="text-white text-xs sm:text-sm font-bold truncate">${player.name}</div>
+                                            <div class="text-xs text-white/90 bg-black/40 rounded px-1 mt-1">
+                                                ${teamInfo.name.split(' ')[0]}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                    <div class="bg-black/90 text-white text-xs p-2 rounded-lg whitespace-nowrap">
+                                        ${player.stats}
+                                    </div>
+                                </div>
+
+                                <button onclick="event.stopPropagation(); removePlayer('${pos}');" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-600 flex items-center justify-center z-30 text-xs">
+                                    ×
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        div.innerHTML = `
+                            <div class="relative">
+                                <div class="player-card rounded-lg border-3 border-dashed border-gray-400 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                                    <div class="text-gray-600 text-center">
+                                        <div class="text-3xl mb-2 animate-pulse">+</div>
+                                        <div class="text-xs font-bold mb-1">${info.name}</div>
+                                        <div class="text-xs opacity-70 bg-gray-200 rounded px-1">${pos}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    container.appendChild(div);
+                });
+            }
+
+        
+                    // 라인업 렌더링 (PC 드래그 + 모바일 선택 방식)
+            function renderLineup() {
+                const container = document.getElementById('lineup');
+                container.innerHTML = '';
+                
+                const mobile = isMobile();
+                
+                // 타자 9명
+                for (let i = 0; i < 9; i++) {
+                    const player = lineup[i];
+                    const div = document.createElement('div');
+                    div.className = 'lineup-item flex-shrink-0';
+                    
+                    const isSelected = mobile && selectedLineupIndex === i;
+                    const canShowChangeBtn = mobile && selectedLineupIndex !== null && selectedLineupIndex !== i;
+                    
+                    div.innerHTML = `
+                        <div class="text-center mb-2">
+                            <span class="text-sm font-bold text-yellow-400">${i + 1}번</span>
+                        </div>
+                        ${player ? `
+                            <div class="w-16 h-20 sm:w-20 sm:h-24 p-2 rounded-lg shadow-lg border-2 transition-all hover:scale-105 relative ${isSelected ? 'lineup-selected' : ''}"
+                                style="background: linear-gradient(135deg, ${teams[player.team].color}cc, ${teams[player.team].subColor}cc); border-color: ${teams[player.team].color}; cursor: ${mobile ? 'pointer' : 'move'};"
+                                draggable="${!mobile}" 
+                                data-index="${i}"
+                                ${mobile ? `onclick="selectLineupPlayer(${i})"` : `ondragstart="dragStart(event, ${i})" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ${i})"`}>
+                                <div class="text-center h-full flex flex-col justify-between ${mobile && canShowChangeBtn ? 'pointer-events-none' : 'pointer-events-none'}">
+                                    <div class="text-lg sm:text-xl">${player.image}</div>
+                                    <div>
+                                        <div class="text-white text-xs font-bold truncate">${player.name}</div>
+                                        <div class="text-xs text-white/80 bg-black/30 rounded px-1 mt-1">
+                                            ${teams[player.team].name.split(' ')[0]}
+                                        </div>
+                                    </div>
+                                </div>
+                                ${mobile && canShowChangeBtn ? `
+                                    <button onclick="event.stopPropagation(); changeLineupPosition(${i})" class="change-btn">변경</button>
+                                ` : ''}
+                            </div>
+                        ` : `
+                            <div class="w-16 h-20 sm:w-20 sm:h-24 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center relative"
+                                data-index="${i}"
+                                ${!mobile ? `ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, ${i})"` : ''}>
+                                ${canShowChangeBtn ? `
+                                    <button onclick="changeLineupPosition(${i})" class="change-btn">변경</button>
+                                ` : `
+                                    <span class="text-white/50 text-xs">대기</span>
+                                `}
+                            </div>
+                        `}
+                    `;
+                    container.appendChild(div);
+                }
+                
+                // 간격
+                const spacer = document.createElement('div');
+                spacer.className = 'w-6';
+                container.appendChild(spacer);
+                
+                // 투수
+                const pitcher = lineup[9];
+                const pitcherDiv = document.createElement('div');
+                pitcherDiv.className = 'flex-shrink-0';
+                pitcherDiv.innerHTML = `
+                    <div class="text-center mb-2">
+                        <span class="text-sm font-bold text-yellow-400">선발투수</span>
+                    </div>
+                    ${pitcher ? `
+                        <div class="w-16 h-20 sm:w-20 sm:h-24 p-2 rounded-lg shadow-lg border-2 transition-all hover:scale-105"
+                            style="background: linear-gradient(135deg, ${teams[pitcher.team].color}cc, ${teams[pitcher.team].subColor}cc); border-color: ${teams[pitcher.team].color};">
+                            <div class="text-center h-full flex flex-col justify-between">
+                                <div class="text-lg sm:text-xl">${pitcher.image}</div>
+                                <div>
+                                    <div class="text-white text-xs font-bold truncate">${pitcher.name}</div>
+                                    <div class="text-xs text-white/80 bg-black/30 rounded px-1 mt-1">
+                                        ${teams[pitcher.team].name.split(' ')[0]}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="w-16 h-20 sm:w-20 sm:h-24 border-2 border-dashed border-white/30 rounded-lg flex items-center justify-center">
+                            <span class="text-white/50 text-xs">대기</span>
+                        </div>
+                    `}
+                `;
+                container.appendChild(pitcherDiv);
+            }
+
+            // 선택된 선수 수 업데이트
+            function updateSelectedCount() {
+                const count = Object.keys(selectedPlayers).length;
+                document.getElementById('selectedCount').innerText = `${count}/10`;
+                const saveBtn = document.getElementById('saveBtn');
+                saveBtn.disabled = count !== 10;
+            }
+
+            // 선수 선택 모달 열기
+            function openPlayerSelection(pos) {
+                currentPosition = pos;
+                const modal = document.getElementById('playerSelectionModal');
+                const playerList = document.getElementById('playerList');
+                const modalTitle = document.getElementById('modalTitle');
+                playerList.innerHTML = '';
+                
+                const posName = positions[pos].name;
+                modalTitle.innerText = `${posName} 선수 선택`;
+                
+                let availablePlayers = [];
+                
+                Object.keys(teams).forEach(teamKey => {
+                    const teamPlayers = players[teamKey] || [];
+                    const teamPitchers = pitchers[teamKey] || [];
+                    
+                    let filteredPlayers = [];
+                    if (pos === 'P') {
+                        filteredPlayers = teamPitchers;
+                    } else {
+                        filteredPlayers = teamPlayers.filter(p => p.position === pos || pos === 'DH');
+                    }
+                    
+                    // 이미 사용된 팀의 선수는 제외
+                    if (!usedTeams.has(teamKey)) {
+                        availablePlayers = availablePlayers.concat(filteredPlayers.map(p => ({
+                            ...p,
+                            team: teamKey
+                        })));
+                    } else {
+                        // 현재 포지션에 선택된 선수가 해당 팀 소속인 경우, 목록에 포함
+                        const selectedPlayer = Object.values(selectedPlayers).find(sp => sp.team === teamKey && sp.positionInTeam === pos);
+                        if (selectedPlayer) {
+                            availablePlayers.push(selectedPlayer);
+                        }
+                    }
+                });
+                
+                if (availablePlayers.length > 0) {
+                    availablePlayers.forEach(player => {
+                        const playerCard = createPlayerCard(player, pos);
+                        playerList.appendChild(playerCard);
+                    });
+                } else {
+                    playerList.innerHTML = `<p class="col-span-full text-center text-gray-400">선택 가능한 선수가 없습니다.</p>`;
+                }
+                
+                modal.classList.remove('hidden');
+            }
+
+            // 선수 카드 생성
+            function createPlayerCard(player, currentPos) {
+                const card = document.createElement('div');
+                const teamInfo = teams[player.team];
+                const isSelected = Object.values(selectedPlayers).some(p => p.id === player.id);
+                const isUsedTeam = usedTeams.has(player.team) && !isSelected;
+
+                card.className = `p-2 rounded-lg border-2 shadow-lg text-center cursor-pointer transition-all relative ${
+                    isUsedTeam ? 'bg-gray-700/50 border-gray-600 cursor-not-allowed' : 'hover:scale-105'
+                }`;
+                card.style.background = `linear-gradient(135deg, ${teamInfo.color}, ${teamInfo.subColor}dd)`;
+                card.style.borderColor = teamInfo.color;
+                
+                if (isUsedTeam) {
+                    card.classList.add('opacity-50');
+                } else {
+                    card.onclick = () => selectPlayer(player);
+                }
+
+                card.innerHTML = `
+                    <div class="text-xl sm:text-2xl">${player.image}</div>
+                    <div class="mt-1 text-white text-sm font-bold truncate">${player.name}</div>
+                    <div class="text-xs text-white/80 bg-black/30 rounded px-1 mt-1 truncate">
+                        ${teamInfo.name.split(' ')[0]} ${player.position}
+                    </div>
+                    <div class="text-xs text-white/70 mt-1">${player.stats}</div>
+                    ${isSelected ? `<span class="absolute top-1 right-1 text-yellow-400 text-sm">✅</span>` : ''}
+                    ${isUsedTeam ? `<span class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white font-bold bg-black/70 px-2 py-1 rounded-full text-xs">사용됨</span>` : ''}
+                `;
+                
+                return card;
+            }
+
+            // 선수 선택
+            function selectPlayer(player) {
+                const oldPlayer = selectedPlayers[currentPosition];
+
+                if (oldPlayer && oldPlayer.team !== player.team) {
+                    usedTeams.delete(oldPlayer.team);
+                }
+                
+                // 기존에 선택된 선수가 있으면 라인업에서 제거
+                if (oldPlayer) {
+                    const oldIndex = lineup.findIndex(p => p && p.id === oldPlayer.id);
+                    if (oldIndex !== -1) {
+                        lineup[oldIndex] = null;
+                    }
+                }
+
+                // 새로운 선수 선택
+                selectedPlayers[currentPosition] = { ...player, positionInTeam: currentPosition };
+                usedTeams.add(player.team);
+
+                if (currentPosition === 'P') {
+                    lineup[9] = selectedPlayers['P'];
+                } else {
+                    const availableSlot = lineup.findIndex(p => p === null);
+                    if (availableSlot !== -1) {
+                        lineup[availableSlot] = selectedPlayers[currentPosition];
+                    } else {
+                        // 이미 라인업이 다 찼을 경우, 교체되는 타자의 위치로
+                        const oldIndex = lineup.findIndex(p => p && p.id === oldPlayer?.id);
+                        if (oldIndex !== -1) {
+                            lineup[oldIndex] = selectedPlayers[currentPosition];
+                        }
+                    }
+                }
+
+                closePlayerModal();
+                renderField();
+                renderLineup();
+                renderTeamStatus();
+                updateSelectedCount();
+            }
+
+            // 선수 제거
+            function removePlayer(pos) {
+                const playerToRemove = selectedPlayers[pos];
+                if (!playerToRemove) return;
+                
+                delete selectedPlayers[pos];
+                
+                // 라인업에서 선수 제거
+                const indexInLineup = lineup.findIndex(p => p && p.id === playerToRemove.id);
+                if (indexInLineup !== -1) {
+                    lineup[indexInLineup] = null;
+                }
+
+                // 해당 팀의 다른 선수가 있는지 확인
+                const isTeamUsedElsewhere = Object.values(selectedPlayers).some(p => p.team === playerToRemove.team);
+                if (!isTeamUsedElsewhere) {
+                    usedTeams.delete(playerToRemove.team);
+                }
+                
+                renderField();
+                renderLineup();
+                renderTeamStatus();
+                updateSelectedCount();
+            }
+
+            // 모달 닫기
+            function closePlayerModal() {
+                document.getElementById('playerSelectionModal').classList.add('hidden');
+            }
+
+            function showRulesModal() {
+                document.getElementById('rulesModal').classList.remove('hidden');
+            }
+
+            function closeRulesModal() {
+                document.getElementById('rulesModal').classList.add('hidden');
+            }
+
+            // 전체 초기화
+            function resetTeam() {
+                selectedPlayers = {};
+                usedTeams.clear();
+                lineup = Array(10).fill(null);
+                selectedLineupIndex = null; // 모바일 선택 초기화
+                init();
+            }
+
+            // 이미지 저장 기능
+            function saveAsImage() {
+                const captureArea = document.getElementById('captureArea');
+                
+                html2canvas(captureArea, {
+                    allowTaint: true,
+                    useCORS: true,
+                    scale: 4
+                }).then(function(canvas) {
+                    const link = document.createElement('a');
+                    link.href = canvas.toDataURL('image/png');
+                    link.download = `나의_KBO_드림팀_${new Date().toLocaleDateString()}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                });
+            }
+
+            // PC용 드래그앤드롭 함수들
+            function dragStart(e, index) {
+                draggedIndex = index;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', index);
+                setTimeout(() => {
+                    e.target.style.opacity = '0.5';
+                }, 0);
+            }
+
+            function dragOver(e) {
+                e.preventDefault();
+                const targetElement = e.currentTarget;
+                if (targetElement.classList.contains('lineup-item') || targetElement.dataset.index !== undefined) {
+                    targetElement.classList.add('drag-over');
+                }
+                e.dataTransfer.dropEffect = 'move';
+            }
+
+            function dragLeave(e) {
+                e.currentTarget.classList.remove('drag-over');
+            }
+
+            function drop(e, targetIndex) {
+                e.preventDefault();
+                e.currentTarget.classList.remove('drag-over');
+                
+                const sourceIndex = draggedIndex;
+                if (sourceIndex === null || sourceIndex === targetIndex) return;
+
+                const temp = lineup[sourceIndex];
+                lineup[sourceIndex] = lineup[targetIndex];
+                lineup[targetIndex] = temp;
+                
+                const draggedElement = document.querySelector(`[data-index="${sourceIndex}"]`);
+                if (draggedElement) {
+                    draggedElement.style.opacity = '1';
+                }
+                
+                renderLineup();
+                draggedIndex = null;
+            }
+
+            // 모바일용 선택/변경 함수들
+            function selectLineupPlayer(index) {
+                if (lineup[index]) {
+                    selectedLineupIndex = selectedLineupIndex === index ? null : index;
+                    renderLineup();
+                }
+            }
+
+            function changeLineupPosition(targetIndex) {
+                if (selectedLineupIndex !== null && targetIndex !== selectedLineupIndex) {
+                    const temp = lineup[selectedLineupIndex];
+                    lineup[selectedLineupIndex] = lineup[targetIndex];
+                    lineup[targetIndex] = temp;
+                    
+                    selectedLineupIndex = null;
+                    renderLineup();
+                }
+            }
+
+            // 초기 실행
+            document.addEventListener('DOMContentLoaded', init);
+
+            // 윈도우 리사이즈 시 필드 재렌더링
+            window.addEventListener('resize', () => {
+                renderField();
+            });
+
+    </script>
+</body>
+
+</html>
